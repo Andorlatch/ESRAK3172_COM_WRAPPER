@@ -1,5 +1,5 @@
 #define DEBUG
-#include "new_beacon_definitions.hpp"
+#include "beacon_defs.hpp"
 SoftwareSerial mySerial(16, 17);
 PortHandle hport(mySerial);
 
