@@ -18,12 +18,12 @@ class PortHandle {
       : MySerial(&portNew) {
       Serial.begin(115200);
       MySerial->begin(9600);
-      MySerial->setTimeout(100);
+      MySerial->setTimeout(1);
       Serial.println("PortHandle started with the reference");
     };
     PortHandle(SoftwareSerial *portNew)
       : MySerial(portNew) {
-      Serial.begin(115200);
+      Serial.begin(9600);
       MySerial->begin(9600);
       MySerial->setTimeout(1500);
       Serial.println("PortHandle started with the pointer ");
@@ -41,8 +41,9 @@ class PortHandle {
     uint8_t Send(double ddata, int port = 1);
     void set_keys(int choice = 0);
     void get_keys(void);
-    void get_conf(void);
-    void set_conf(void);
+    void get_conf(const int mode_selector = 0);
+    void set_conf(const int mode_selector = 0);
+    String CheckDownlink(void);
   private:
     SoftwareSerial *MySerial;
     String portSend(const char *pdata);
@@ -50,8 +51,9 @@ class PortHandle {
 //Class -------------------------------------------------
 
 
-void PortHandle::set_conf(void) {
-  if ("1" == NWM) { // NWM = LORAWAN
+void PortHandle::set_conf(const int mode_selector) {
+  recent_mode = mode_selector;
+  if (1 == mode_selector) { // NWM = LORAWAN
 
     String B = portSend("AT+NWM=1" );
 #ifdef DEBUG
@@ -91,22 +93,30 @@ void PortHandle::set_conf(void) {
       B = portSend("AT+JOIN=" JOIN_REQ);
     }
   }
-  else if ("0" == NWM) { // NWM = P2P
+  else if (0 == mode_selector) {
+
+    // NWM = P2P
     //<Freq>,<SF>,<Bandwidth>,<CR>,<Preamble>,<Power>
     //AT+P2P=868000000:7:125:0:8:15
-
-    String B = portSend("AT+P2P" P2P_OPS );
+    String B = portSend("AT+NWM=0" );
 #ifdef DEBUG
-    Serial.println("AT+P2P" P2P_OPS);
+    Serial.println("AT+NWM=0" );
 #endif
     while (B.indexOf("OK") == -1) {
-      B = portSend("AT+P2P" P2P_OPS);
+      B = portSend("AT+NWM=0");
+    }
+    B = portSend("AT+P2P="P2P_OPS );
+#ifdef DEBUG
+    Serial.println("AT+P2P="P2P_OPS);
+#endif
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+P2P="P2P_OPS);
     }
   }
 }
-void PortHandle::get_conf(void) {
+void PortHandle::get_conf(const int mode_selector) {
 
-  if ( "1" == NWM) {
+  if ( 1 == recent_mode) {
     String B = portSend("AT+CLASS=?" );
 #ifdef DEBUG
     Serial.println("AT+CLASS=?" );
@@ -139,7 +149,7 @@ void PortHandle::get_conf(void) {
     }
     Serial.println("MODE: 1 confs here completed");
   }
-  else if ("0" == NWM) {
+  else if (1 == recent_mode) {
 
     String B = portSend("AT+P2P=?" );
 #ifdef DEBUG
@@ -154,38 +164,44 @@ void PortHandle::get_conf(void) {
 }
 void PortHandle::get_keys(void) {
 
-  String B = portSend("AT+DEVADDR=?" );
+  if (0 == recent_mode)
+    Serial.println("First change mode. \n Recent Mode is : P2P");
+  else {
+
+
+    String B = portSend("AT+DEVADDR=?" );
 #ifdef DEBUG
-  Serial.println("AT+DEVADDR=?" );
+    Serial.println("AT+DEVADDR=?" );
 #endif
-  while (B.indexOf("OK") == -1) {
-    B = portSend("AT+DEVADDR=?" );
-  }
-  B = portSend("AT+DEVEUI=?" );
-#ifdef DEBUG
-  Serial.println("AT+DEVEUI=?" );
-#endif
-  while (B.indexOf("OK") == -1) {
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+DEVADDR=?" );
+    }
     B = portSend("AT+DEVEUI=?" );
-  }
-
-  B = portSend("AT+APPSKEY=?" );
 #ifdef DEBUG
-  Serial.println("AT+APPSKEY=?" );
+    Serial.println("AT+DEVEUI=?" );
 #endif
-  while (B.indexOf("OK") == -1) {
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+DEVEUI=?" );
+    }
+
     B = portSend("AT+APPSKEY=?" );
-  }
-
-  B = portSend("AT+NWKSKEY=?" );
 #ifdef DEBUG
-  Serial.println("AT+NWKS_KEY=?" );
+    Serial.println("AT+APPSKEY=?" );
 #endif
-  while (B.indexOf("OK") == -1) {
-    B = portSend("AT+NWKSKEY=?" );
-  }
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+APPSKEY=?" );
+    }
 
-  Serial.println("Auto Register (choice = 0) completed");
+    B = portSend("AT+NWKSKEY=?" );
+#ifdef DEBUG
+    Serial.println("AT+NWKS_KEY=?" );
+#endif
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+NWKSKEY=?" );
+    }
+
+    Serial.println("Auto Register (choice = 0) completed");
+  }
 }
 
 
@@ -283,9 +299,9 @@ uint8_t PortHandle::Send(int pdata, int port) {
   {
 
     if ("1" == NWM)
-      sprintf(tempData, "AT+SEND=%d:0%d", port, pdata);
+      sprintf(tempData, "AT+SEND=%d:A%d", port, pdata);
     if ("0" == NWM)
-      sprintf(tempData, "AT+PSEND=0%d", pdata);
+      sprintf(tempData, "AT+PSEND=A%d", pdata);
 
   }
   else
@@ -307,21 +323,28 @@ uint8_t PortHandle::Send(int pdata, int port) {
     Serial.println("(if)Sending int response is: " + resp);
 #endif
     portSend(tempData);
-    while ((delay(500), resp = MySerial->readString())) {
+    while ((delay(800), resp = MySerial->readString())) {
 
       Serial.println("Response = " + resp);
 
-      if (resp.indexOf("CONFIRMED") != -1) {
-        if (resp.indexOf("CONFIRMED OK") != -1)
-          return 0;
-        else if (resp.indexOf("CONFIRMED FAILED") != -1)
-          return 1;
+      if (resp.indexOf("CONFIRMED OK") != -1)
+        return 0;
+      else {
+
+        if (resp.indexOf("FAILED") != -1)
+          portSend(tempData);
+
+        
       }
 
-      else countertemp++;
-
-      if (countertemp % 10 == 0)
+      if(countertemp++ % 10 == 0){
         portSend(tempData);
+      }
+
+      
+
+
+
     }
 
   }
@@ -341,9 +364,9 @@ uint8_t PortHandle::Send(const char *pdata, int port) {
   {
 
     if ("1" == NWM)
-      sprintf(tempData, "AT+SEND=%d:0%s", port, pdata);
+      sprintf(tempData, "AT+SEND=%d:A%s", port, pdata);
     else if ("0" == NWM)
-      sprintf(tempData, "AT+PSEND=0%s", port, pdata);
+      sprintf(tempData, "AT+PSEND=A%s", port, pdata);
 
   }
   else
@@ -377,6 +400,22 @@ uint8_t PortHandle::Send(const char *pdata, int port) {
   }
 }
 
+String PortHandle::CheckDownlink(void) {
+  MySerial->println("AT+RECV=?");
+  delay(1000);
+  String holdStr = MySerial->readString();
+  
+  #ifdef DEBUG 
+  Serial.println("Downlink data -> "+holdStr);
+  #endif
+  holdStr.trim();
+  if(holdStr.indexOf("1:") != -1){
+   holdStr = holdStr.substring(holdStr.indexOf("1:")+2,holdStr.length());
+    Serial.println("Downlink data -> "+holdStr);
+      return holdStr;
+  }
+  
 
+}
 
 #endif
