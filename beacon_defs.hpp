@@ -1,3 +1,4 @@
+#include "WString.h"
 #ifndef BEACON_DEFS_H
 #define BEACON_DEFS_H
 
@@ -9,78 +10,94 @@
 #include <Arduino.h>
 #include "beacon_confs.hpp"
 
-
+String conokReturn(String&& coktempStr){
+  Serial.println("conokreturn = "+coktempStr);
+  if(coktempStr.indexOf("+EVT:1:") != -1){
+    coktempStr.trim();
+    coktempStr = coktempStr.substring(coktempStr.indexOf("+EVT:UNICAST")+21,coktempStr.length());
+    Serial.println("Confirmed OK return an DL with data of => "+coktempStr+" and length of "+String{coktempStr.length()});
+    return String{coktempStr};
+  }
+else{
+  Serial.println("Confirmed OK not returned a DL");
+  return String{"No_DL_data"};
+}
+  
+}
 class PortHandle {
 
-  public:
+public:
 
-    PortHandle(SoftwareSerial &portNew)
-      : MySerial(&portNew) {
-      Serial.begin(115200);
-      MySerial->begin(9600);
-      MySerial->setTimeout(100);
-      Serial.println("PortHandle started with the reference");
-    };
-    PortHandle(SoftwareSerial *portNew)
-      : MySerial(portNew) {
-      Serial.begin(115200);
-      MySerial->begin(9600);
-      MySerial->setTimeout(1500);
-      Serial.println("PortHandle started with the pointer ");
-    };
+  PortHandle(SoftwareSerial &portNew)
+    : MySerial(&portNew) {
+    Serial.begin(115200);
+    MySerial->begin(9600);
+    MySerial->setTimeout(80);
+    Serial.println("PortHandle started with the reference");
+  };
+  PortHandle(SoftwareSerial *portNew)
+    : MySerial(portNew) {
+    Serial.begin(9600);
+    MySerial->begin(9600);
+    MySerial->setTimeout(1500);
+    Serial.println("PortHandle started with the pointer ");
+  };
 
-    /* String listenRes() {
-      String holdStr = MOVE(MySerial->readString());
-      holdStr.trim();
-      return holdStr;
+  String listenRes() {
+    String holdStr = MySerial->readString();
+    holdStr.trim();
+    return holdStr;
+  }
 
 
-      }*/
-    uint8_t Send(const char *pdata, int port = 1);
-    uint8_t Send(int pdata, int port = 1);
-    uint8_t Send(double ddata, int port = 1);
-    void set_keys(int choice = 0);
-    void get_keys(void);
-    void get_conf(void);
-    void set_conf(void);
-  private:
-    SoftwareSerial *MySerial;
-    String portSend(const char *pdata);
+
+  uint8_t Send(const char *pdata, int port = 1);
+  String Send(int pdata, int port = 1);
+  uint8_t Send(double ddata, int port = 1);
+  void set_keys(int choice = 0);
+  void get_keys(void);
+  void get_conf(void);
+  void set_conf(int mode_selector = 0);
+  String CheckDownlink(void);
+private:
+  SoftwareSerial *MySerial;
+  String portSend(const char *pdata);
 };
 //Class -------------------------------------------------
 
 
-void PortHandle::set_conf(void) {
-  if ("1" == NWM) { // NWM = LORAWAN
+void PortHandle::set_conf(int mode_selector) {
+  recent_mode = mode_selector;
+  if (1 == mode_selector) {  // NWM = LORAWAN
 
-    String B = portSend("AT+NWM=1" );
+    String B = portSend("AT+NWM=1");
 #ifdef DEBUG
-    Serial.println("AT+NWM=1" );
+    Serial.println("AT+NWM=1");
 #endif
     while (B.indexOf("OK") == -1) {
       B = portSend("AT+NWM=1");
     }
 
-    B = portSend("AT+CLASS=" CLASS );
+    B = portSend("AT+CLASS=" CLASS);
 #ifdef DEBUG
-    Serial.println("AT+CLASS=" CLASS );
+    Serial.println("AT+CLASS=" CLASS);
 #endif
     while (B.indexOf("OK") == -1) {
-      B = portSend("AT+CLASS=" CLASS );
+      B = portSend("AT+CLASS=" CLASS);
     }
     B = portSend("AT+BAND=" BAND);
 #ifdef DEBUG
-    Serial.println("AT+BAND=" BAND );
+    Serial.println("AT+BAND=" BAND);
 #endif
     while (B.indexOf("OK") == -1) {
-      B = portSend("AT+BAND=" BAND );
+      B = portSend("AT+BAND=" BAND);
     }
-    B = MOVE(portSend("AT+NJM=" NJM));
+    B = portSend("AT+NJM=" NJM);
 #ifdef DEBUG
     Serial.println("AT+NJM=" NJM);
 #endif
     while (B.indexOf("OK") == -1) {
-      B = portSend("AT+NJM=" NJM );
+      B = portSend("AT+NJM=" NJM);
     }
 
     B = portSend("AT+JOIN=" JOIN_REQ);
@@ -90,102 +107,112 @@ void PortHandle::set_conf(void) {
     while (B.indexOf("OK") == -1) {
       B = portSend("AT+JOIN=" JOIN_REQ);
     }
-  }
-  else if ("0" == NWM) { // NWM = P2P
+  } else if (0 == mode_selector) {
+
+    // NWM = P2P
     //<Freq>,<SF>,<Bandwidth>,<CR>,<Preamble>,<Power>
     //AT+P2P=868000000:7:125:0:8:15
-
-    String B = portSend("AT+P2P" P2P_OPS );
+    String B = portSend("AT+NWM=0");
 #ifdef DEBUG
-    Serial.println("AT+P2P" P2P_OPS);
+    Serial.println("AT+NWM=0");
 #endif
     while (B.indexOf("OK") == -1) {
-      B = portSend("AT+P2P" P2P_OPS);
+      B = portSend("AT+NWM=0");
+    }
+    B = portSend("AT+P2P=" P2P_OPS);
+#ifdef DEBUG
+    Serial.println("AT+P2P=" P2P_OPS);
+#endif
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+P2P=" P2P_OPS);
     }
   }
 }
 void PortHandle::get_conf(void) {
-
-  if ( "1" == NWM) {
-    String B = portSend("AT+CLASS=?" );
+   
+  if (1 == recent_mode) {
+    String B = portSend("AT+CLASS=?");
 #ifdef DEBUG
-    Serial.println("AT+CLASS=?" );
+    Serial.println("AT+CLASS=?");
 #endif
     while (B.indexOf("OK") == -1) {
-      B = portSend("AT+CLASS=?" );
+      B = portSend("AT+CLASS=?");
     }
-    B = portSend("AT+BAND=?" );
+    B = portSend("AT+BAND=?");
 #ifdef DEBUG
-    Serial.println("AT+BAND=?" );
+    Serial.println("AT+BAND=?");
 #endif
     while (B.indexOf("OK") == -1) {
-      B = portSend("AT+BAND=?" );
-    }
-
-    B = portSend("AT+NWM=?" );
-#ifdef DEBUG
-    Serial.println("AT+NWM=?" );
-#endif
-    while (B.indexOf("OK") == -1) {
-      B = portSend("AT+NWM=?" );
+      B = portSend("AT+BAND=?");
     }
 
-    B = portSend("AT+NJM=?" );
+    B = portSend("AT+NWM=?");
 #ifdef DEBUG
-    Serial.println("AT+NJM=?" );
+    Serial.println("AT+NWM=?");
 #endif
     while (B.indexOf("OK") == -1) {
-      B = portSend("AT+NJM=?" );
+      B = portSend("AT+NWM=?");
+    }
+
+    B = portSend("AT+NJM=?");
+#ifdef DEBUG
+    Serial.println("AT+NJM=?");
+#endif
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+NJM=?");
     }
     Serial.println("MODE: 1 confs here completed");
-  }
-  else if ("0" == NWM) {
+  } else if (1 == recent_mode) {
 
-    String B = portSend("AT+P2P=?" );
+    String B = portSend("AT+P2P=?");
 #ifdef DEBUG
-    Serial.println("AT+P2P=?" );
+    Serial.println("AT+P2P=?");
 #endif
     while (B.indexOf("OK") == -1) {
-      B = portSend("AT+P2P=?" );
+      B = portSend("AT+P2P=?");
     }
   }
-
-
 }
 void PortHandle::get_keys(void) {
 
-  String B = portSend("AT+DEVADDR=?" );
-#ifdef DEBUG
-  Serial.println("AT+DEVADDR=?" );
-#endif
-  while (B.indexOf("OK") == -1) {
-    B = portSend("AT+DEVADDR=?" );
-  }
-  B = portSend("AT+DEVEUI=?" );
-#ifdef DEBUG
-  Serial.println("AT+DEVEUI=?" );
-#endif
-  while (B.indexOf("OK") == -1) {
-    B = portSend("AT+DEVEUI=?" );
-  }
+  if (0 == recent_mode)
+    Serial.println("First change mode. \n Recent Mode is : P2P");
+  else {
 
-  B = portSend("AT+APPSKEY=?" );
-#ifdef DEBUG
-  Serial.println("AT+APPSKEY=?" );
-#endif
-  while (B.indexOf("OK") == -1) {
-    B = portSend("AT+APPSKEY=?" );
-  }
 
-  B = portSend("AT+NWKSKEY=?" );
+    String B = portSend("AT+DEVADDR=?");
 #ifdef DEBUG
-  Serial.println("AT+NWKS_KEY=?" );
+    Serial.println("AT+DEVADDR=?");
 #endif
-  while (B.indexOf("OK") == -1) {
-    B = portSend("AT+NWKSKEY=?" );
-  }
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+DEVADDR=?");
+    }
+    B = portSend("AT+DEVEUI=?");
+#ifdef DEBUG
+    Serial.println("AT+DEVEUI=?");
+#endif
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+DEVEUI=?");
+    }
 
-  Serial.println("Auto Register (choice = 0) completed");
+    B = portSend("AT+APPSKEY=?");
+#ifdef DEBUG
+    Serial.println("AT+APPSKEY=?");
+#endif
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+APPSKEY=?");
+    }
+
+    B = portSend("AT+NWKSKEY=?");
+#ifdef DEBUG
+    Serial.println("AT+NWKS_KEY=?");
+#endif
+    while (B.indexOf("OK") == -1) {
+      B = portSend("AT+NWKSKEY=?");
+    }
+
+    Serial.println("Auto Register (choice = 0) completed");
+  }
 }
 
 
@@ -229,13 +256,12 @@ void PortHandle::set_keys(int choice) {
 
     Serial.println("Auto Register (choice = 0) completed");
   }
-
 }
 
 String PortHandle::portSend(const char *pdata) {
 
   MySerial->println(pdata);
-  delay(100);
+  delay(200);
   if (MySerial->available()) {
     String resValue = MySerial->readString();
     resValue.trim();
@@ -262,7 +288,7 @@ uint8_t PortHandle::Send(double ddata, int port) {
 
   if (resp == "OK") {
 #ifdef DEBUG
-    Serial.println("(if)Sending double response is: " +  resp);
+    Serial.println("(if)Sending double response is: " + resp);
 #endif
     return 0;
   }
@@ -275,55 +301,82 @@ uint8_t PortHandle::Send(double ddata, int port) {
     return 1;
   }
 }
-uint8_t PortHandle::Send(int pdata, int port) {
+String PortHandle::Send(int pdata, int port) {
   char tempData[100];
   int countertemp = 0;
   String tempStr = String(pdata);
-  if (tempStr.length() % 2)
-  {
+  if (tempStr.length() % 2) {
 
     if ("1" == NWM)
-      sprintf(tempData, "AT+SEND=%d:0%d", port, pdata);
+      sprintf(tempData, "AT+SEND=%d:A%d", port, pdata);
     if ("0" == NWM)
-      sprintf(tempData, "AT+PSEND=0%d", pdata);
+      sprintf(tempData, "AT+PSEND=A%d", pdata);
 
-  }
-  else
-  {
+  } else {
 
     if ("1" == NWM)
       sprintf(tempData, "AT+SEND=%d:%d", port, pdata);
     else if ("0" == NWM)
       sprintf(tempData, "AT+PSEND=%d", pdata);
   }
-
+  tempStr = "";
 #ifdef DEBUG
   Serial.println(tempData);
 #endif
   String resp = portSend(tempData);
-  if (resp == "OK") {
+  delay(100);
+  if (resp.indexOf("OK") != -1) {
+    
 
 #ifdef DEBUG
     Serial.println("(if)Sending int response is: " + resp);
 #endif
-    portSend(tempData);
-    while ((delay(500), resp = MySerial->readString())) {
-
-      Serial.println("Response = " + resp);
-
-      if (resp.indexOf("CONFIRMED") != -1) {
-        if (resp.indexOf("CONFIRMED OK") != -1)
-          return 0;
-        else if (resp.indexOf("CONFIRMED FAILED") != -1)
-          return 1;
+label:
+    //resp = listenRes();
+    while (resp.indexOf("CONFIRMED") == -1) {
+      if(resp.indexOf("UNICAST") != -1){
+        goto uclabel;
       }
-
-      else countertemp++;
-
-      if (countertemp % 10 == 0)
-        portSend(tempData);
+      resp = listenRes();
+      Serial.println("Listen Resp == " + resp);
     }
 
+    if(resp.indexOf("FAILED") != -1){
+      portSend(tempData);
+      resp=String{""};
+      goto label;
+    }
+    else if(resp.indexOf("UNICAST") != -1){
+      uclabel:
+      resp = conokReturn(MOVE(resp));
+      delay(100);
+      if(resp.indexOf("No_DL_data") != -1){
+
+        Serial.println("No Downlink returned =>> "+tempStr);
+        return String{"00"};
+        
+      }
+      else{
+        Serial.println("Downlink has come =>> data is: "+resp);
+        return resp;
+      }
+    }
+    else if (resp.indexOf("CONFIRMED OK") != -1){
+      
+      resp = conokReturn(MOVE(resp));
+      delay(100);
+      if(resp.indexOf("No_DL_data") != -1){
+
+        Serial.println("No Downlink returned =>> "+tempStr);
+        return String{"00"};
+        
+      }
+      else{
+        Serial.println("Downlink has come =>> data is: "+resp);
+        return resp;
+      }
+
+    }
   }
 
   else {
@@ -331,23 +384,19 @@ uint8_t PortHandle::Send(int pdata, int port) {
     Serial.println("(else)Sending int response is: " + resp);
 
 #endif
-    return 1;
+    return String{"FF"};
   }
-
 }
 uint8_t PortHandle::Send(const char *pdata, int port) {
   char tempData[100];
-  if (String{pdata} .length() % 2)
-  {
+  if (String{ pdata }.length() % 2) {
 
     if ("1" == NWM)
-      sprintf(tempData, "AT+SEND=%d:0%s", port, pdata);
+      sprintf(tempData, "AT+SEND=%d:A%s", port, pdata);
     else if ("0" == NWM)
-      sprintf(tempData, "AT+PSEND=0%s", port, pdata);
+      sprintf(tempData, "AT+PSEND=A%s", port, pdata);
 
-  }
-  else
-  {
+  } else {
 
     if ("1" == NWM)
       sprintf(tempData, "AT+SEND=%d:%s", port, pdata);
@@ -363,7 +412,7 @@ uint8_t PortHandle::Send(const char *pdata, int port) {
 
   if (resp == "OK") {
 #ifdef DEBUG
-    Serial.println("(if)Sending const char* response is: " +  resp);
+    Serial.println("(if)Sending const char* response is: " + resp);
 #endif
     return 0;
   }
@@ -374,6 +423,23 @@ uint8_t PortHandle::Send(const char *pdata, int port) {
 
 #endif
     return 1;
+  }
+}
+
+String PortHandle::CheckDownlink(void) {
+  MySerial->println("AT+RECV=?");
+  delay(1000);
+  String holdStr = MySerial->readString();
+
+#ifdef DEBUG
+  Serial.println("Downlink data -> " + holdStr);
+#endif
+  holdStr.trim();
+  if (holdStr.indexOf("1:") != -1) {
+    holdStr = holdStr.substring(holdStr.indexOf("1:") + 2, holdStr.length());
+    holdStr.trim();
+    Serial.println("Downlink data -> " + holdStr);
+    return holdStr;
   }
 }
 

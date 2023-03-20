@@ -36,10 +36,10 @@
 
 //Programmer needs to configure lora join keys here
 
-#define DEV_EUI   "68cbd47450d82f3d"
-#define DEV_ADDR  "01c94f60"
-#define APPS_KEY  "1f264b78a764570f53d900f3d435cbce"
-#define NWKS_KEY  "1f264b78a764570f53d900f3d435cbce"
+#define DEV_EUI   "ac1f09fffe075ef0"
+#define DEV_ADDR  "fe075ef0"
+#define APPS_KEY  "ac1f09fffe075ef0ac1f09fff8683172"
+#define NWKS_KEY  "ac1f09fffe075ef0ac1f09fff8683172"
 #define APP_KEY
 
 //Programmer needs to set conf parameters here
@@ -47,7 +47,7 @@
 #define NJM   ABP
 #define CLASS CLASS_A
 
-
+int recent_mode = 0;
 
 
 
