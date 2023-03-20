@@ -14,8 +14,7 @@ void setup() {
 void loop() {
 
   yeniZaman = millis();
-  /* bir önceki turdan itibaren 1000 milisaniye geçmiş mi
-  yani yeniZaman ile eskiZaman farkı 1000den büyük mü */
+  
   if (yeniZaman - eskiZaman > BEACON_1_MIN * tempTime) {
     String tempDL = hport.Send(3344);
      dl_ins_return(MOVE(tempDL),tempTime);
@@ -32,6 +31,6 @@ void loop() {
     // }
     eskiZaman = yeniZaman;
   }
-  /* Eski zaman değeri yeni zaman değeri ile güncelleniyor */
+ 
   //Serial.println(yeniZaman);
 }
