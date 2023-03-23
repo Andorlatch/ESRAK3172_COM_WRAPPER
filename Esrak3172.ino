@@ -14,12 +14,14 @@ void setup() {
 void loop() {
 
   yeniZaman = millis();
-  
+
+
   if (yeniZaman - eskiZaman > BEACON_1_MIN * tempTime) {
     String tempDL = hport.Send(3344);
-     dl_ins_return(MOVE(tempDL),tempTime);
+     hport.dl_ins_return(MOVE(tempDL),tempTime,"34");
 
     Serial.println("tempTime is == "+String{tempTime});
+    Serial.println("downlink is == "+hport.CheckDownlink());
     // if (tempDL.indexOf("ab") != -1) {
     //   tempTime = 10000;
     //   Serial.println("Downlink has (ab) ->" + tempDL);
@@ -31,6 +33,6 @@ void loop() {
     // }
     eskiZaman = yeniZaman;
   }
- 
+  
   //Serial.println(yeniZaman);
 }

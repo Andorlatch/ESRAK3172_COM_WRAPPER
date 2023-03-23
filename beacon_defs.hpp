@@ -9,21 +9,32 @@
 #include <SoftwareSerial.h>
 #include <Arduino.h>
 #include "beacon_confs.hpp"
+#include "lib_ics.hpp"
+////////////////////////////////
+/*
+Sonradan eklenen bir IITR interrupt    
+*/
+std::atomic<bool> rxPending(false);
 
-String conokReturn(String&& coktempStr){
-  Serial.println("conokreturn = "+coktempStr);
-  if(coktempStr.indexOf("+EVT:1:") != -1){
+void IRAM_ATTR receiveHandler() {
+  rxPending.store(true);
+}
+/*    */
+String conokReturn(String &&coktempStr) {
+  Serial.println("conokreturn = " + coktempStr);
+  if (coktempStr.indexOf("+EVT:1:") != -1) {
     coktempStr.trim();
-    coktempStr = coktempStr.substring(coktempStr.indexOf("+EVT:UNICAST")+21,coktempStr.length());
-    Serial.println("Confirmed OK return an DL with data of => "+coktempStr+" and length of "+String{coktempStr.length()});
-    return String{coktempStr};
+    coktempStr = coktempStr.substring(coktempStr.indexOf("+EVT:UNICAST") + 21, coktempStr.length());
+    Serial.println("Confirmed OK return an DL with data of => " + coktempStr + " and length of " + String{ coktempStr.length() });
+    return String{ coktempStr };
+  } else {
+    Serial.println("Confirmed OK not returned a DL");
+    return String{ "No_DL_data" };
   }
-else{
-  Serial.println("Confirmed OK not returned a DL");
-  return String{"No_DL_data"};
 }
-  
-}
+
+
+///////////////////////////////////////
 class PortHandle {
 
 public:
@@ -32,7 +43,8 @@ public:
     : MySerial(&portNew) {
     Serial.begin(115200);
     MySerial->begin(9600);
-    MySerial->setTimeout(80);
+    MySerial->setTimeout(1000);  //1000
+    MySerial->onReceive(receiveHandler);
     Serial.println("PortHandle started with the reference");
   };
   PortHandle(SoftwareSerial *portNew)
@@ -43,28 +55,53 @@ public:
     Serial.println("PortHandle started with the pointer ");
   };
 
-  String listenRes() {
-    String holdStr = MySerial->readString();
+  [[nodiscard]] String listenRes() {
+    String holdStr = "";
+    if (rxPending.load() && MySerial->available()) {
+      delay(200);
+      holdStr = MySerial->readString();
+
+      rxPending.store(false);
+    }
     holdStr.trim();
     return holdStr;
   }
 
 
-
-  uint8_t Send(const char *pdata, int port = 1);
-  String Send(int pdata, int port = 1);
-  uint8_t Send(double ddata, int port = 1);
+  void dl_ins_return(String &&coktempStr, int &atime, const char *nString);
+  [[nodiscard]] String Send(const char *pdata, int port = 1);
+  [[nodiscard]] String Send(int pdata, int port = 1);
+  [[nodiscard]] String Send(double ddata, int port = 1);
   void set_keys(int choice = 0);
   void get_keys(void);
   void get_conf(void);
   void set_conf(int mode_selector = 0);
-  String CheckDownlink(void);
+  [[nodiscard]] String CheckDownlink(void);
 private:
   SoftwareSerial *MySerial;
-  String portSend(const char *pdata);
+  [[nodiscard]] String portSend(const char *pdata);
 };
 //Class -------------------------------------------------
 
+
+
+String PortHandle::portSend(const char *pdata) {
+
+  MySerial->println(pdata);
+  delay(10);
+  /*if (MySerial->available()) {
+    String resValue = MySerial->readString();
+    delay(200);
+    resValue.trim(); */
+  String resValue = listenRes();
+  delay(100);
+#ifdef DEBUG
+  Serial.println("DEBUGGED RESVALUE = " + resValue);
+#endif
+
+
+  return resValue;
+}
 
 void PortHandle::set_conf(int mode_selector) {
   recent_mode = mode_selector;
@@ -129,7 +166,7 @@ void PortHandle::set_conf(int mode_selector) {
   }
 }
 void PortHandle::get_conf(void) {
-   
+
   if (1 == recent_mode) {
     String B = portSend("AT+CLASS=?");
 #ifdef DEBUG
@@ -248,7 +285,7 @@ void PortHandle::set_keys(int choice) {
 
     B = portSend("AT+NWKSKEY=" NWKS_KEY);
 #ifdef DEBUG
-    Serial.println("AT+NWKS_KEY=" NWKS_KEY);
+    Serial.println("AT+NWKSKEY=" NWKS_KEY);
 #endif
     while (B.indexOf("OK") == -1) {
       B = portSend("AT+NWKSKEY=" NWKS_KEY);
@@ -258,21 +295,12 @@ void PortHandle::set_keys(int choice) {
   }
 }
 
-String PortHandle::portSend(const char *pdata) {
 
-  MySerial->println(pdata);
-  delay(200);
-  if (MySerial->available()) {
-    String resValue = MySerial->readString();
-    resValue.trim();
-#ifdef DEBUG
-    Serial.println(resValue);
-#endif
-    return resValue;
-  }
-}
 
-uint8_t PortHandle::Send(double ddata, int port) {
+
+
+
+String PortHandle::Send(double ddata, int port) {
   char tempData[100];
   String dval = String(ddata);
   dval = (dval.length() % 2 ? dval + '0' : dval);
@@ -290,7 +318,7 @@ uint8_t PortHandle::Send(double ddata, int port) {
 #ifdef DEBUG
     Serial.println("(if)Sending double response is: " + resp);
 #endif
-    return 0;
+    return resp;
   }
 
   else {
@@ -298,7 +326,7 @@ uint8_t PortHandle::Send(double ddata, int port) {
     Serial.println("(else)Sending double response is: " + resp);
 
 #endif
-    return 1;
+    return String{ "FF" };
   }
 }
 String PortHandle::Send(int pdata, int port) {
@@ -325,8 +353,7 @@ String PortHandle::Send(int pdata, int port) {
 #endif
   String resp = portSend(tempData);
   delay(100);
-  if (resp.indexOf("OK") != -1) {
-    
+  if (resp.indexOf("OK") != -1 || resp.indexOf("+EVT:") != -1) {
 
 #ifdef DEBUG
     Serial.println("(if)Sending int response is: " + resp);
@@ -334,48 +361,45 @@ String PortHandle::Send(int pdata, int port) {
 label:
     //resp = listenRes();
     while (resp.indexOf("CONFIRMED") == -1) {
-      if(resp.indexOf("UNICAST") != -1){
+      if (resp.indexOf("UNICAST") != -1) {
         goto uclabel;
       }
       resp = listenRes();
+      delay(100);
+      //Delay eklenebilir.
       Serial.println("Listen Resp == " + resp);
     }
 
-    if(resp.indexOf("FAILED") != -1){
+    if (resp.indexOf("FAILED") != -1) {
       portSend(tempData);
-      resp=String{""};
+      resp = String{ "" };
       goto label;
-    }
-    else if(resp.indexOf("UNICAST") != -1){
-      uclabel:
+    } else if (resp.indexOf("UNICAST") != -1) {
+uclabel:
       resp = conokReturn(MOVE(resp));
       delay(100);
-      if(resp.indexOf("No_DL_data") != -1){
+      if (resp.indexOf("No_DL_data") != -1) {
 
-        Serial.println("No Downlink returned =>> "+tempStr);
-        return String{"00"};
-        
-      }
-      else{
-        Serial.println("Downlink has come =>> data is: "+resp);
+        Serial.println("No Downlink returned =>> " + resp);
+        return String{ "00" };
+
+      } else {
+        Serial.println("Downlink has come =>> data is: " + resp);
         return resp;
       }
-    }
-    else if (resp.indexOf("CONFIRMED OK") != -1){
-      
+    } else if (resp.indexOf("CONFIRMED OK") != -1) {
+
       resp = conokReturn(MOVE(resp));
       delay(100);
-      if(resp.indexOf("No_DL_data") != -1){
+      if (resp.indexOf("No_DL_data") != -1) {
 
-        Serial.println("No Downlink returned =>> "+tempStr);
-        return String{"00"};
-        
-      }
-      else{
-        Serial.println("Downlink has come =>> data is: "+resp);
+        Serial.println("No Downlink returned =>> " + tempStr);
+        return String{ "00" };
+
+      } else {
+        Serial.println("Downlink has come =>> data is: " + resp);
         return resp;
       }
-
     }
   }
 
@@ -384,10 +408,10 @@ label:
     Serial.println("(else)Sending int response is: " + resp);
 
 #endif
-    return String{"FF"};
+    return String{ "FF" };
   }
 }
-uint8_t PortHandle::Send(const char *pdata, int port) {
+String PortHandle::Send(const char *pdata, int port) {
   char tempData[100];
   if (String{ pdata }.length() % 2) {
 
@@ -410,19 +434,62 @@ uint8_t PortHandle::Send(const char *pdata, int port) {
   String resp = portSend(tempData);
 
 
-  if (resp == "OK") {
+  if (resp.indexOf("OK") != -1 || resp.indexOf("+EVT:") != -1) {
+
 #ifdef DEBUG
-    Serial.println("(if)Sending const char* response is: " + resp);
+    Serial.println("(if)Sending int response is: " + resp);
 #endif
-    return 0;
+label:
+    //resp = listenRes();
+    while (resp.indexOf("CONFIRMED") == -1) {
+      if (resp.indexOf("UNICAST") != -1) {
+        goto uclabel;
+      }
+      resp = listenRes();
+      delay(100);
+      //Delay eklenebilir.
+      Serial.println("Listen Resp == " + resp);
+    }
+
+    if (resp.indexOf("FAILED") != -1) {
+      portSend(tempData);
+      resp = String{ "" };
+      goto label;
+    } else if (resp.indexOf("UNICAST") != -1) {
+uclabel:
+      resp = conokReturn(MOVE(resp));
+      delay(100);
+      if (resp.indexOf("No_DL_data") != -1) {
+
+        Serial.println("No Downlink returned =>> " + resp);
+        return String{ "00" };
+
+      } else {
+        Serial.println("Downlink has come =>> data is: " + resp);
+        return resp;
+      }
+    } else if (resp.indexOf("CONFIRMED OK") != -1) {
+
+      resp = conokReturn(MOVE(resp));
+      delay(100);
+      if (resp.indexOf("No_DL_data") != -1) {
+
+        Serial.println("No Downlink returned =>> " + resp);
+        return String{ "00" };
+
+      } else {
+        Serial.println("Downlink has come =>> data is: " + resp);
+        return resp;
+      }
+    }
   }
 
   else {
 #ifdef DEBUG
-    Serial.println("(else)Sending const char * response is: " + resp);
+    Serial.println("(else)Sending int response is: " + resp);
 
 #endif
-    return 1;
+    return String{ "FF" };
   }
 }
 
@@ -443,6 +510,32 @@ String PortHandle::CheckDownlink(void) {
   }
 }
 
+void PortHandle::dl_ins_return(String &&coktempStr, int &atime, const char *nString) {
+  Serial.println("DL entered to dl_ins_return = " + coktempStr);
+  if (coktempStr.indexOf("ffab") != -1) {
+    coktempStr.trim();
+    coktempStr = coktempStr.substring(coktempStr.indexOf("ffab") + 4, coktempStr.length());
+    Serial.println("(dl_ins_return) returned mins of => " + coktempStr);
+    atime = coktempStr.toInt() > 100 ? 60 : coktempStr.toInt() <= 0 ? 1
+                                                                    : coktempStr.toInt();
+    if (atime)
+      Serial.println("(dl_ins_return) changed the given time to => " + String{ atime } + " minutes");
+    else Serial.println("(dl_ins_return) not changed the given time (data is not reasonable)");
+  } else if (coktempStr.indexOf("ffff") != -1) {
+    Serial.println("(dl_ins_return) returned a reset code... Restarting in 2 seconds.");
+    delay(2000);
+    ESP.restart();
+
+  } else if (coktempStr.indexOf("ffcc") != -1) {
+    //Bu kısım geçici olarak yazılıyor. Virtual keywordu öğrenildikten sonra bakılacak.
+    Send(nString);
+    delay(2000);
+    
+
+  } else {
+    Serial.println("not a reasonable DL");
+  }
+}
 
 
 #endif
