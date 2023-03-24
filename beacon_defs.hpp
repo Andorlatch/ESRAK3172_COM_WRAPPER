@@ -77,6 +77,7 @@ public:
   void get_conf(void);
   void set_conf(int mode_selector = 0);
   [[nodiscard]] String CheckDownlink(void);
+  void openP2pListen();
 private:
   SoftwareSerial *MySerial;
   [[nodiscard]] String portSend(const char *pdata);
@@ -102,7 +103,20 @@ String PortHandle::portSend(const char *pdata) {
 
   return resValue;
 }
+void PortHandle::openP2pListen()
+{
+  String checkReturn = portSend("AT+PRECV=65535");
+    checkTemp:
+    if(checkReturn.indexOf("OK") != -1)
+      Serial.println("P2P Listen has opened.");
+    else if(checkReturn.indexOf("AT_ERROR") != -1)
+    {
+      checkReturn = portSend("AT+PRECV=65535");
+      goto checkTemp; 
+    }   
 
+  
+}
 void PortHandle::set_conf(int mode_selector) {
   recent_mode = mode_selector;
   if (1 == mode_selector) {  // NWM = LORAWAN
@@ -141,9 +155,14 @@ void PortHandle::set_conf(int mode_selector) {
 #ifdef DEBUG
     Serial.println("AT+JOIN=" JOIN_REQ);
 #endif
-    while (B.indexOf("OK") == -1) {
-      B = portSend("AT+JOIN=" JOIN_REQ);
+    while (B.indexOf("JOINED") == -1) {
+      B = listenRes();
+      if (B.indexOf("JOIN FAILED") != -1) {
+        Serial.println("Network Join Session has been failed. The response is = " + B + " Trying to join again..");
+        B = portSend("AT+JOIN=" JOIN_REQ);
+      }
     }
+    Serial.println("Network Join Session has been COMPLETE. The response is = " + B);
   } else if (0 == mode_selector) {
 
     // NWM = P2P
@@ -211,43 +230,66 @@ void PortHandle::get_conf(void) {
   }
 }
 void PortHandle::get_keys(void) {
-
+  /*#if NJM == "1"
+      Serial.println("Devices Registered with OTAA to the network server");
+    #else 
+    Serial.println("Devices Registered with ABP to the network server");
+    #endif */
+  String B = "";
   if (0 == recent_mode)
     Serial.println("First change mode. \n Recent Mode is : P2P");
   else {
+    if (NJM == "ABP") {
+      Serial.println("Recent join mode is ABP.");
 
-
-    String B = portSend("AT+DEVADDR=?");
-#ifdef DEBUG
-    Serial.println("AT+DEVADDR=?");
-#endif
-    while (B.indexOf("OK") == -1) {
       B = portSend("AT+DEVADDR=?");
-    }
-    B = portSend("AT+DEVEUI=?");
 #ifdef DEBUG
-    Serial.println("AT+DEVEUI=?");
+      Serial.println("AT+DEVADDR=?");
 #endif
-    while (B.indexOf("OK") == -1) {
-      B = portSend("AT+DEVEUI=?");
-    }
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+DEVADDR=?");
+      }
 
-    B = portSend("AT+APPSKEY=?");
-#ifdef DEBUG
-    Serial.println("AT+APPSKEY=?");
-#endif
-    while (B.indexOf("OK") == -1) {
       B = portSend("AT+APPSKEY=?");
-    }
-
-    B = portSend("AT+NWKSKEY=?");
 #ifdef DEBUG
-    Serial.println("AT+NWKS_KEY=?");
+      Serial.println("AT+APPSKEY=?");
 #endif
-    while (B.indexOf("OK") == -1) {
-      B = portSend("AT+NWKSKEY=?");
-    }
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+APPSKEY=?");
+      }
 
+      B = portSend("AT+NWKSKEY=?");
+#ifdef DEBUG
+      Serial.println("AT+NWKS_KEY=?");
+#endif
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+NWKSKEY=?");
+      }
+      B = portSend("AT+APPKEY=?");
+#ifdef DEBUG
+      Serial.println("AT+APP_KEY=?");
+#endif
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+APPKEY=?");
+      }
+    } else {
+      Serial.println("Recent join mode is OTAA.");
+      B = portSend("AT+DEVEUI=?");
+#ifdef DEBUG
+      Serial.println("AT+DEVEUI=?");
+#endif
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+DEVEUI=?");
+      }
+
+      B = portSend("AT+APPKEY=?");
+#ifdef DEBUG
+      Serial.println("AT+APPKEY=?");
+#endif
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+APPKEY=?");
+      }
+    }
     Serial.println("Auto Register (choice = 0) completed");
   }
 }
@@ -257,40 +299,53 @@ void PortHandle::get_keys(void) {
 
 
 void PortHandle::set_keys(int choice) {
-
+  String B = "";
   if (0 == choice) {
+    if (NJM == "ABP") {
 
-    String B = portSend("AT+DEVADDR=" DEV_ADDR);
-#ifdef DEBUG
-    Serial.println("AT+DEVADDR=" DEV_ADDR);
-#endif
-    while (B.indexOf("OK") == -1) {
+        Serial.println("Recent join mode is ABP.");
       B = portSend("AT+DEVADDR=" DEV_ADDR);
-    }
-    B = portSend("AT+DEVEUI=" DEV_EUI);
 #ifdef DEBUG
-    Serial.println("AT+DEVEUI=" DEV_EUI);
+      Serial.println("AT+DEVADDR=" DEV_ADDR);
 #endif
-    while (B.indexOf("OK") == -1) {
-      B = portSend("AT+DEVEUI=" DEV_EUI);
-    }
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+DEVADDR=" DEV_ADDR);
+      }
 
-    B = portSend("AT+APPSKEY=" APPS_KEY);
-#ifdef DEBUG
-    Serial.println("AT+APPSKEY=" APPS_KEY);
-#endif
-    while (B.indexOf("OK") == -1) {
       B = portSend("AT+APPSKEY=" APPS_KEY);
-    }
-
-    B = portSend("AT+NWKSKEY=" NWKS_KEY);
 #ifdef DEBUG
-    Serial.println("AT+NWKSKEY=" NWKS_KEY);
+      Serial.println("AT+APPSKEY=" APPS_KEY);
 #endif
-    while (B.indexOf("OK") == -1) {
-      B = portSend("AT+NWKSKEY=" NWKS_KEY);
-    }
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+APPSKEY=" APPS_KEY);
+      }
 
+      B = portSend("AT+NWKSKEY=" NWKS_KEY);
+#ifdef DEBUG
+      Serial.println("AT+NWKSKEY=" NWKS_KEY);
+#endif
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+NWKSKEY=" NWKS_KEY);
+      }
+    } else {
+      Serial.println("Recent join mode is OTAA.");
+
+      B = portSend("AT+DEVEUI=" DEV_EUI);
+#ifdef DEBUG
+      Serial.println("AT+DEVEUI=" DEV_EUI);
+#endif
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+DEVEUI=" DEV_EUI);
+      }
+
+      B = portSend("AT+APPKEY=" APP_KEY);
+#ifdef DEBUG
+      Serial.println("AT+APPKEY=" APP_KEY);
+#endif
+      while (B.indexOf("OK") == -1) {
+        B = portSend("AT+APPKEY=" APP_KEY);
+      }
+    }
     Serial.println("Auto Register (choice = 0) completed");
   }
 }
@@ -371,7 +426,9 @@ label:
     }
 
     if (resp.indexOf("FAILED") != -1) {
-      portSend(tempData);
+      resp = portSend(tempData);
+      if(resp.indexOf("CONFIRMED OK") != -1)
+        goto label;
       resp = String{ "" };
       goto label;
     } else if (resp.indexOf("UNICAST") != -1) {
@@ -528,9 +585,9 @@ void PortHandle::dl_ins_return(String &&coktempStr, int &atime, const char *nStr
 
   } else if (coktempStr.indexOf("ffcc") != -1) {
     //Bu kısım geçici olarak yazılıyor. Virtual keywordu öğrenildikten sonra bakılacak.
-    Send(nString);
-    delay(2000);
-    
+    String tempDL = Send(nString);
+    //delay(2000);
+
 
   } else {
     Serial.println("not a reasonable DL");
